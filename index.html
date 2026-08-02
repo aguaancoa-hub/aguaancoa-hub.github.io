@@ -1862,6 +1862,21 @@
             actualizarRelojBanner();
             setInterval(actualizarRelojBanner, 1000);
             setInterval(actualizarMonitoreoBanner, 30000);
+
+            // Refrescar la vista activa (Alertas o Clientes) cada 30s para que
+            // el tiempo transcurrido de cada cliente se vea actualizado sin
+            // tener que cambiar de pestaña.
+            setInterval(actualizarVistaActivaEnVivo, 30000);
+        }
+
+        function actualizarVistaActivaEnVivo() {
+            const tabActivo = document.querySelector('.tab-content.active');
+            if (!tabActivo) return;
+            if (tabActivo.id === 'alertas') {
+                mostrarAlertas();
+            } else if (tabActivo.id === 'clientes') {
+                renderTablaClientes();
+            }
         }
 
         // MONITOREO EN VIVO (BANNER) — clientes en Comité y Empleador, respetando privacidad por usuario
