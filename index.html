@@ -2465,11 +2465,6 @@
             e.preventDefault();
 
             const rutInput = document.getElementById('rut').value;
-            if (!validarRut(rutInput)) {
-                alert('El RUT ingresado no es válido. Verifica el número y el dígito verificador.');
-                document.getElementById('rut').focus();
-                return;
-            }
 
             const contactoInput = document.getElementById('contacto').value;
             if (!validarTelefono(contactoInput)) {
