@@ -4099,4 +4099,261 @@
                     if (c.ejecutivo === nombreAnterior) c.ejecutivo = nuevoNombre;
                     if (c.usuarioCreador === nombreAnterior) c.usuarioCreador = nuevoNombre;
                 });
-                localStorage.setItem('client
+                localStorage.setItem('clientes', JSON.stringify(clientes));
+                registrarAuditoria('Renombrar usuario', `${nombreAnterior} → ${nuevoNombre} (${id})`);
+            }
+
+            if (perfilAnterior !== nuevoPerfil) {
+                registrarAuditoria('Cambiar perfil de usuario', `${nuevoNombre} (${id}): ${perfilAnterior} → ${nuevoPerfil}`);
+            }
+
+            if (nuevaPassword.trim()) {
+                registrarAuditoria('Cambiar contraseña de usuario', `${nuevoNombre} (${id})`);
+            }
+
+            usuarios[id].nombre = nuevoNombre;
+            usuarios[id].perfil = nuevoPerfil;
+            usuarios[id].sucursal = nuevaSucursal;
+            if (nuevaPassword.trim()) {
+                usuarios[id].password = nuevaPassword;
+            }
+
+            localStorage.setItem('usuarios', JSON.stringify(usuarios));
+            const contenedorPass = document.getElementById(`passwordCell_${id}`);
+            if (contenedorPass) {
+                contenedorPass.innerHTML = `<button type="button" class="btn btn-secondary btn-small" onclick="activarCampoPassword('${id}')" style="white-space: nowrap;">🔑 Contraseña</button>`;
+            }
+            poblarSelectLogin();
+            poblarSelectsEjecutivo();
+            renderTablaClientes();
+            actualizarDashboard();
+
+            if (usuarioActual && usuarioActual.id === id) {
+                usuarioActual.nombre = nuevoNombre;
+                usuarioActual.perfil = nuevoPerfil;
+                usuarioActual.sucursal = nuevaSucursal;
+                sessionStorage.setItem('usuarioActual', JSON.stringify(usuarioActual));
+                actualizarUsuarioActual();
+            }
+
+            mostrarToast(`✅ Datos de ${nuevoNombre} actualizados`);
+        }
+
+        function eliminarUsuario(id) {
+            if (usuarioActual && usuarioActual.id === id) {
+                alert('No puedes eliminar tu propia cuenta mientras estás conectado con ella');
+                return;
+            }
+            if (usuarios[id].perfil === 'admin' && contarAdmins() <= 1) {
+                alert('Debe existir al menos un administrador en el sistema');
+                return;
+            }
+
+            const nombre = usuarios[id].nombre;
+            if (!confirm(`¿Eliminar al usuario ${nombre}? Sus clientes asignados conservarán el historial, pero el usuario ya no podrá iniciar sesión.`)) {
+                return;
+            }
+
+            delete usuarios[id];
+            localStorage.setItem('usuarios', JSON.stringify(usuarios));
+            registrarAuditoria('Eliminar usuario', `${nombre} (${id})`);
+            poblarSelectLogin();
+            poblarSelectsEjecutivo();
+            mostrarToast(`🗑️ Usuario ${nombre} eliminado`);
+            mostrarGestionUsuarios();
+        }
+
+        function mostrarCambiarPassword() {
+            let html = `
+                <div class="modal-content" style="max-width: 500px;">
+                    <div class="modal-header">
+                        <h2>Cambiar Contraseña</h2>
+                        <button class="modal-close" onclick="cerrarModalDinamico(this)">×</button>
+                    </div>
+                    <form onsubmit="guardarNuevaPassword(event)">
+                        <div class="form-group">
+                            <label>Contraseña Actual *</label>
+                            <input type="password" id="passActual" placeholder="Ingresa tu contraseña actual" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Nueva Contraseña *</label>
+                            <input type="password" id="passNueva" placeholder="Ingresa tu nueva contraseña" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Confirmar Nueva Contraseña *</label>
+                            <input type="password" id="passConfirm" placeholder="Confirma tu nueva contraseña" required>
+                        </div>
+                        <div style="display: flex; gap: 15px; margin-top: 30px;">
+                            <button type="submit" class="btn btn-primary" style="flex: 1;">Cambiar Contraseña</button>
+                            <button type="button" class="btn btn-secondary" onclick="cerrarModalDinamico(this)" style="flex: 1;">Cancelar</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+
+            const tempDiv = document.createElement('div');
+            tempDiv.className = 'modal active';
+            tempDiv.id = 'modalCambiarPass';
+            tempDiv.innerHTML = html;
+            tempDiv.onclick = (e) => {
+                if (e.target === tempDiv) {
+                    tempDiv.remove();
+                }
+            };
+            document.body.appendChild(tempDiv);
+            const cerrarConEscape = (e) => {
+                if (e.key === 'Escape') {
+                    tempDiv.remove();
+                    document.removeEventListener('keydown', cerrarConEscape);
+                }
+            };
+            document.addEventListener('keydown', cerrarConEscape);
+        }
+
+        function guardarNuevaPassword(e) {
+            e.preventDefault();
+            const passActual = document.getElementById('passActual').value;
+            const passNueva = document.getElementById('passNueva').value;
+            const passConfirm = document.getElementById('passConfirm').value;
+
+            if (usuarios[usuarioActual.id].password !== passActual) {
+                alert('Contraseña actual incorrecta');
+                return;
+            }
+
+            if (passNueva !== passConfirm) {
+                alert('Las contraseñas no coinciden');
+                return;
+            }
+
+            if (passNueva.length < 4) {
+                alert('La contraseña debe tener al menos 4 caracteres');
+                return;
+            }
+
+            usuarios[usuarioActual.id].password = passNueva;
+            localStorage.setItem('usuarios', JSON.stringify(usuarios));
+            document.getElementById('modalCambiarPass')?.remove();
+            alert('Contraseña actualizada exitosamente');
+        }
+
+        function cerrarModalDinamico(element) {
+            let modal = element.closest('.modal');
+            if (modal) modal.remove();
+        }
+
+        function mostrarOpcionLimpiar() {
+            const confirm1 = confirm('¿Estás completamente seguro? Esta acción eliminará TODOS los datos.');
+            if (!confirm1) return;
+
+            const confirm2 = confirm('ÚLTIMA ADVERTENCIA: Todos los clientes y datos serán eliminados permanentemente. ¿Continuar?');
+            if (!confirm2) return;
+
+            const password = prompt('Ingresa la contraseña para confirmar (contraseña: "17706355-K Asociación"):');
+            if (password !== '17706355-K Asociación') {
+                alert('Contraseña incorrecta. Operación cancelada.');
+                return;
+            }
+
+            localStorage.clear();
+            sessionStorage.clear();
+            clientes = [];
+            alert('Todos los datos han sido eliminados.');
+            cerrarSesion();
+        }
+
+        // MODAL HELPERS
+        function abrirModal(modalId) {
+            document.getElementById(modalId).classList.add('active');
+        }
+
+        function cerrarModal(modalId) {
+            document.getElementById(modalId).classList.remove('active');
+        }
+
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal')) {
+                e.target.classList.remove('active');
+            }
+        });
+
+        // SUITE DE PRUEBAS EMBEBIDA
+        // Ejecutar desde la consola con ejecutarPruebas(), o abrir el archivo con ?test=1 para verlas en pantalla.
+        function ejecutarPruebas() {
+            const resultados = [];
+            function assert(nombre, condicion) {
+                resultados.push({ nombre, ok: !!condicion });
+            }
+
+            // Validación de RUT
+            assert('validarRut: 11.111.111-1 es válido', validarRut('11.111.111-1'));
+            assert('validarRut: 12.345.678-5 es válido', validarRut('12.345.678-5'));
+            assert('validarRut: dígito verificador incorrecto es inválido', !validarRut('12.345.678-9'));
+            assert('validarRut: RUT muy corto es inválido', !validarRut('1'));
+
+            // Formateo de RUT
+            assert('formatearRut agrega puntos y guion', formatearRut('123456785') === '12.345.678-5');
+
+            // Teléfono
+            assert('validarTelefono: +56912345678 es válido', validarTelefono('+56912345678'));
+            assert('validarTelefono: número muy corto es inválido', !validarTelefono('123'));
+
+            // Mes desde fecha (evita el bug de zona horaria detectado antes)
+            assert('obtenerMesDeFecha 2026-08-01 → 8', obtenerMesDeFecha('2026-08-01') === 8);
+            assert('obtenerMesDeFecha 2026-01-31 → 1', obtenerMesDeFecha('2026-01-31') === 1);
+            assert('obtenerMesDeFecha 2026-12-15 → 12', obtenerMesDeFecha('2026-12-15') === 12);
+
+            // Cálculo de alerta
+            const configIngresadoOriginal = config['Ingresado'];
+            config['Ingresado'] = { valor: 10, unidad: 'minutos' };
+
+            const clienteVerde = { estado: 'Ingresado', historialEstados: [{ estado: 'Ingresado', timestamp: Date.now() - 5 * 60 * 1000 }] };
+            const alertaVerde = calcularAlerta(clienteVerde);
+            assert('calcularAlerta: verde cuando el tiempo transcurrido es bajo', alertaVerde && alertaVerde.estado === 'verde');
+
+            const clienteRojo = { estado: 'Ingresado', historialEstados: [{ estado: 'Ingresado', timestamp: Date.now() - 11 * 60 * 1000 }] };
+            const alertaRoja = calcularAlerta(clienteRojo);
+            assert('calcularAlerta: rojo cuando excede el tiempo permitido', alertaRoja && alertaRoja.estado === 'rojo');
+
+            config['Ingresado'] = configIngresadoOriginal;
+
+            // Orden por estado
+            const listaTest = [{ estado: 'Cursado' }, { estado: 'Ingresado' }, { estado: 'Comité' }];
+            const ordenada = ordenarPorEstado(listaTest);
+            assert('ordenarPorEstado respeta el orden del flujo de trabajo', ordenada[0].estado === 'Ingresado' && ordenada[2].estado === 'Cursado');
+
+            // Iniciales
+            assert('generarIniciales con nombre y apellido', generarIniciales('Juan Perez') === 'JP');
+            assert('generarIniciales con una sola palabra', generarIniciales('Ana') === 'AN');
+
+            return resultados;
+        }
+
+        function mostrarResultadosPruebas() {
+            const resultados = ejecutarPruebas();
+            const okCount = resultados.filter(r => r.ok).length;
+            const todoOk = okCount === resultados.length;
+
+            console.log(`%c PRUEBAS: ${okCount}/${resultados.length} OK `, `background:${todoOk ? '#16a34a' : '#dc2626'};color:white;padding:2px 6px;border-radius:4px;font-weight:bold;`);
+            resultados.forEach(r => console.log(r.ok ? `✅ ${r.nombre}` : `❌ ${r.nombre}`));
+
+            const contenedorExistente = document.getElementById('panelPruebas');
+            if (contenedorExistente) contenedorExistente.remove();
+
+            const panel = document.createElement('div');
+            panel.id = 'panelPruebas';
+            panel.style.cssText = 'position:fixed; inset:0; background:#0f172a; z-index:99999; overflow-y:auto; padding:30px; font-family:Consolas,monospace; color:white;';
+            panel.innerHTML = `
+                <div style="max-width:600px; margin:0 auto;">
+                    <h2 style="margin-bottom:5px;">🧪 Suite de Pruebas — Oriencoop</h2>
+                    <p style="color:${todoOk ? '#4ade80' : '#f87171'}; font-weight:bold; margin-bottom:20px;">${okCount}/${resultados.length} pruebas exitosas</p>
+                    ${resultados.map(r => `<div style="padding:8px 12px; margin-bottom:4px; border-radius:6px; background:rgba(255,255,255,0.05); color:${r.ok ? '#4ade80' : '#f87171'};">${r.ok ? '✅' : '❌'} ${r.nombre}</div>`).join('')}
+                    <button onclick="document.getElementById('panelPruebas').remove()" style="margin-top:20px; padding:10px 20px; background:#FF9900; color:white; border:none; border-radius:6px; cursor:pointer; font-weight:bold;">Cerrar</button>
+                </div>
+            `;
+            document.body.appendChild(panel);
+            return resultados;
+        }
+    </script>
+</body>
+</html>
